@@ -133,6 +133,32 @@ activate_user_service() {
 	fi
 }
 
+# The media row sends XF86LaunchA and XF86LaunchB for Mission Control and
+# Launchpad, like Apple keyboards. GNOME binds neither by default, so add them
+# to the overview and app grid shortcuts next to whatever is set there.
+bind_launch_keys() {
+	local runtime="/run/user/$target_uid"
+	[[ -S "$runtime/bus" ]] || {
+		info "log in and rerun the installer to bind Mission Control and Launchpad"
+		return 0
+	}
+	sudo -H -u "$target_user" env \
+		XDG_RUNTIME_DIR="$runtime" \
+		DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus" \
+		python3 - <<'PY' || warn "could not bind Mission Control and Launchpad"
+import ast, subprocess
+SCHEMA = "org.gnome.shell.keybindings"
+for key, accel in [("toggle-overview", "XF86LaunchA"),
+                   ("toggle-application-view", "XF86LaunchB")]:
+    value = subprocess.run(["gsettings", "get", SCHEMA, key],
+                           capture_output=True, text=True, check=True).stdout
+    accels = ast.literal_eval(value.strip().removeprefix("@as "))
+    if accel not in accels:
+        accels.append(accel)
+        subprocess.run(["gsettings", "set", SCHEMA, key, str(accels)], check=True)
+PY
+}
+
 run_step "install kait2en-touchbar dependencies" install_dependencies
 if (( STEP_STATUS == 0 )); then
 	run_step "prepare kait2en-touchbar device access" prepare_device_access
@@ -142,6 +168,9 @@ if (( STEP_STATUS == 0 )); then
 fi
 if (( STEP_STATUS == 0 )); then
 	run_step "configure kait2en-touchbar integration" configure_system
+fi
+if (( STEP_STATUS == 0 )); then
+	run_step "bind Mission Control and Launchpad" bind_launch_keys
 fi
 if (( STEP_STATUS == 0 )); then
 	run_step "activate kait2en-touchbar user service" activate_user_service

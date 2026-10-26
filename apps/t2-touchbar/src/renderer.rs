@@ -42,6 +42,8 @@ enum Icon {
     Next,
     Mute,
     Volume(bool),
+    MissionControl,
+    Launchpad,
 }
 
 const KEY_GAP: u16 = 10;
@@ -119,6 +121,11 @@ impl Layout {
                 vec![
                     (Glyph::Icon(Icon::Brightness(false)), Key::BrightnessDown),
                     (Glyph::Icon(Icon::Brightness(true)), Key::BrightnessUp),
+                ],
+                // XF86LaunchA and XF86LaunchB, the keys of Apple keyboards.
+                vec![
+                    (Glyph::Icon(Icon::MissionControl), Key::Scale),
+                    (Glyph::Icon(Icon::Launchpad), Key::AllApplications),
                 ],
                 vec![
                     (Glyph::Icon(Icon::Keyboard(false)), Key::IllumDown),
@@ -252,10 +259,16 @@ impl Layout {
 
     /// Width of a media key, the size the shorter rows reuse.
     fn media_cell(width: u16, physical_escape: bool) -> u16 {
-        Self::new(Mode::Media, width, physical_escape)
-            .buttons
-            .last()
-            .map_or(width / 14, |button| button.right - button.left)
+        // The width of a media key without Mission Control and Launchpad:
+        // eleven keys in four groups. The app and special rows keep it, so
+        // their text labels stay as roomy as before.
+        let start = if physical_escape {
+            KEY_GAP
+        } else {
+            KEY_GAP + width / 14 + GROUP_GAP
+        };
+        let spacing = KEY_GAP * (11 - 4) + GROUP_GAP * 3;
+        width.saturating_sub(start + KEY_GAP + spacing) / 11
     }
 
     pub fn hit(&self, x: f64, y: f64, height: u16) -> Option<usize> {
@@ -974,6 +987,42 @@ fn icon_shapes(icon: Icon) -> Vec<Shape> {
                 shapes.push(Shape::Solid(path));
             }
         }
+        Icon::MissionControl => {
+            // A window in front, two behind it at the sides.
+            if let Some(path) = build(&|path| {
+                path.push_path(&rounded_rect(-6.5, -5.0, 6.5, 6.0, 1.2));
+                path.move_to(-8.5, -3.0);
+                path.line_to(-11.5, -3.0);
+                path.line_to(-11.5, 4.0);
+                path.line_to(-8.5, 4.0);
+                path.move_to(8.5, -3.0);
+                path.line_to(11.5, -3.0);
+                path.line_to(11.5, 4.0);
+                path.line_to(8.5, 4.0);
+                path.move_to(-5.0, -8.5);
+                path.line_to(5.0, -8.5);
+            }) {
+                shapes.push(Shape::Stroke(path));
+            }
+        }
+        Icon::Launchpad => {
+            // The app grid.
+            if let Some(path) = build(&|path| {
+                for row in [-7.5f32, 0.0, 7.5] {
+                    for column in [-7.5f32, 0.0, 7.5] {
+                        path.push_path(&rounded_rect(
+                            column - 2.6,
+                            row - 2.6,
+                            column + 2.6,
+                            row + 2.6,
+                            1.0,
+                        ));
+                    }
+                }
+            }) {
+                shapes.push(Shape::Solid(path));
+            }
+        }
         Icon::Mute | Icon::Volume(_) => {
             if let Some(path) = build(&|path| {
                 path.move_to(-10.0, -3.6);
@@ -1102,7 +1151,7 @@ mod tests {
             (media.buttons[0].left, media.buttons[0].right)
         );
         assert_eq!(last.right, media_last.right);
-        assert_eq!(last.right - last.left, media_last.right - media_last.left);
+        assert_eq!(last.right - last.left, Layout::media_cell(2170, false));
     }
 
     #[test]
@@ -1123,15 +1172,13 @@ mod tests {
     }
 
     #[test]
-    fn app_keys_follow_esc_with_the_media_width() {
-        let media = Layout::new(Mode::Media, 2170, false);
-        let last = media.buttons[media.buttons.len() - 1];
-        let media_cell = last.right - last.left;
+    fn app_keys_follow_esc_with_the_short_row_width() {
+        let media_cell = Layout::media_cell(2170, false);
         let labels: Vec<&'static str> = vec!["k"; 40];
         let app = Layout::with_custom(Mode::App, 2170, false, &labels);
         assert_eq!(app.buttons[0].action, Action::Key(Key::Esc));
         assert_eq!(app.buttons[1].action, Action::App(0));
-        assert!(app.buttons.len() < labels.len(), "only as many as fit");
+        assert_eq!(app.buttons.len(), 1 + 11, "eleven keys fit after esc");
         for button in &app.buttons[1..] {
             assert_eq!(button.right - button.left, media_cell);
             assert!(button.right <= 2170);

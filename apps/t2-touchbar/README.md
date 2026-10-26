@@ -9,7 +9,8 @@ the time.
 
 Three fixed layers are available:
 
-- media keys
+- media keys: display brightness, Mission Control and Launchpad (the GNOME
+  overview and app grid), keyboard brightness, playback, microphone and volume
 - F-keys
 - keys the MacBook keyboard lacks: print, insert, delete, home, end, page
   up and page down

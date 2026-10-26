@@ -137,7 +137,7 @@ Apple's native Touch Bar keeps working.
 
 Keeps the Touch Bar dark until it is touched or Fn is pressed.
 
-- Offers a media row, an F-key row and a row with print, insert, delete,
+- Offers a media row with Mission Control and Launchpad, an F-key row and a row with print, insert, delete,
   home, end and page keys.
 - Two-finger swipes change the volume on the dark bar.
 - Two-finger swipes change the row on a lit bar.
