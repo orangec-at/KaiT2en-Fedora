@@ -44,6 +44,10 @@ activity_timeout_ms = 30000
 # dark after activity_timeout_ms without input. Needs activity_backlight.
 stay_lit = false
 
+# Show the F-key row only while Fn is held, like macOS, and the previous row
+# again on release, instead of switching rows after fn_long_press_ms.
+fn_momentary = false
+
 # Show "Artist – Title" on the dark bar for five seconds when a media player
 # (MPRIS) starts a new track, with previous/next keys at both ends.
 show_track_changes = true

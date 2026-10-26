@@ -30,6 +30,9 @@ pub struct Config {
     /// Keep the saved row lit while the keyboard or trackpad is in use,
     /// like macOS does, instead of waking it only on a touch or Fn.
     pub stay_lit: bool,
+    /// Show the F-key row only while Fn is held, like macOS does, instead
+    /// of switching rows on a long press.
+    pub fn_momentary: bool,
 }
 
 impl Default for Config {
@@ -52,6 +55,7 @@ impl Default for Config {
             activity_timeout_ms: 30_000,
             show_track_changes: true,
             stay_lit: false,
+            fn_momentary: false,
         }
     }
 }

@@ -146,6 +146,8 @@ Keeps the Touch Bar dark until it is touched or Fn is pressed.
 - Tracks from media players briefly appear on the dark bar.
 - Remembers the last active row.
 - Holding Fn switches between the media row and the last remembered row.
+  With `fn_momentary = true` the F-key row shows only while Fn is held, like
+  on macOS.
 - Up to four personal keys can be configured in
   `~/.config/kait2en-touchbar/keys.toml`.
 - App profiles in `~/.config/kait2en-touchbar/apps.toml` add a row of keys

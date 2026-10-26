@@ -121,6 +121,10 @@ and the row stays lit until that idle period passes, with no learned timeout.
 It needs `activity_backlight = true`, so the OLED panel still goes dark when
 the Mac is left alone.
 
+Set `fn_momentary = true` to make Fn work like on macOS as well: holding Fn
+shows the F-key row from any row, app rows included, and releasing it brings
+the previous row back. The long press that switches rows is then off.
+
 ## Installation
 
 For a standalone Fedora installation from the repository, run:

@@ -206,6 +206,8 @@ struct Runtime {
     deadline_ms: Option<u64>,
     fn_down_ms: Option<u64>,
     fn_toggled: bool,
+    /// The row under the F-key row while Fn is held with `fn_momentary`.
+    fn_return: Option<Mode>,
     contacts: HashMap<u32, Contact>,
     positions: HashMap<u32, f64>,
     pending: Option<PendingTouch>,
@@ -324,6 +326,7 @@ impl Runtime {
             deadline_ms: None,
             fn_down_ms: None,
             fn_toggled: false,
+            fn_return: None,
             contacts: HashMap::new(),
             positions: HashMap::new(),
             pending: None,
@@ -1630,6 +1633,9 @@ impl Runtime {
             return Ok(());
         }
         let now = self.now_ms();
+        if self.config.fn_momentary {
+            return self.fn_momentary_event(pressed, now);
+        }
         if pressed {
             self.fn_down_ms = Some(now);
             self.fn_toggled = false;
@@ -1641,6 +1647,42 @@ impl Runtime {
                 self.deadline_ms = Some(now + self.lit_timeout_ms());
             }
         }
+        Ok(())
+    }
+
+    /// Shows the F-key row while Fn is held and the previous row again on
+    /// release. The row stays lit for the whole hold.
+    fn fn_momentary_event(&mut self, pressed: bool, now: u64) -> Result<()> {
+        if pressed {
+            if self.fn_return.is_some() {
+                return Ok(());
+            }
+            self.fn_return = Some(self.state.mode);
+            if self.visible && self.state.mode != Mode::Function {
+                self.switch_mode(Mode::Function, now, false)?;
+            } else {
+                self.state.set_mode(Mode::Function);
+                self.wake(false)?;
+            }
+            self.deadline_ms = None;
+            return Ok(());
+        }
+        let Some(back) = self.fn_return.take() else {
+            return Ok(());
+        };
+        // The focus may have left the profiled app during the hold.
+        let back = match back {
+            Mode::App if self.app_active.is_none() => self.mode_before_app,
+            back => back,
+        };
+        if !self.visible {
+            self.state.set_mode(back);
+            return Ok(());
+        }
+        if back != self.state.mode {
+            self.switch_mode(back, now, false)?;
+        }
+        self.deadline_ms = Some(now + self.lit_timeout_ms());
         Ok(())
     }
 
@@ -1702,16 +1744,22 @@ impl Runtime {
             return Ok(());
         }
         let previous = std::mem::replace(&mut self.app_active, active);
+        // During an Fn hold the row under the F keys follows the focus.
+        let current = self.fn_return.unwrap_or(self.state.mode);
         let target = match active {
             Some(_) => {
-                if previous.is_none() && self.state.mode != Mode::App {
-                    self.mode_before_app = self.state.mode;
+                if previous.is_none() && current != Mode::App {
+                    self.mode_before_app = current;
                 }
                 Mode::App
             }
-            None if self.state.mode == Mode::App => self.mode_before_app,
+            None if current == Mode::App => self.mode_before_app,
             None => return Ok(()),
         };
+        if self.fn_return.is_some() {
+            self.fn_return = Some(target);
+            return Ok(());
+        }
         if !self.visible || self.touch_id != TouchIdState::Idle {
             self.state.set_mode(target);
             return Ok(());
