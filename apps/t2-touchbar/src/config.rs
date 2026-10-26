@@ -33,6 +33,9 @@ pub struct Config {
     /// Show the F-key row only while Fn is held, like macOS does, instead
     /// of switching rows on a long press.
     pub fn_momentary: bool,
+    /// With `fn_momentary`: keep the usual row in apps with a profile and
+    /// open their row with a short tap of Fn.
+    pub fn_tap_app_row: bool,
 }
 
 impl Default for Config {
@@ -56,6 +59,7 @@ impl Default for Config {
             show_track_changes: true,
             stay_lit: false,
             fn_momentary: false,
+            fn_tap_app_row: false,
         }
     }
 }
@@ -109,6 +113,10 @@ impl Config {
         anyhow::ensure!(
             !self.stay_lit || self.activity_backlight,
             "stay_lit needs activity_backlight = true"
+        );
+        anyhow::ensure!(
+            !self.fn_tap_app_row || self.fn_momentary,
+            "fn_tap_app_row needs fn_momentary = true"
         );
         parse_color(&self.key_color)
             .with_context(|| format!("key_color {:?} must be #rrggbb", self.key_color))?;
@@ -166,6 +174,17 @@ pub fn state_path() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fn_tap_app_row_needs_fn_momentary() {
+        let mut config = Config {
+            fn_tap_app_row: true,
+            ..Config::default()
+        };
+        assert!(config.validate().is_err());
+        config.fn_momentary = true;
+        assert!(config.validate().is_ok());
+    }
 
     #[test]
     fn stay_lit_needs_the_idle_timeout() {

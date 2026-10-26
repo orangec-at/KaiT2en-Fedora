@@ -208,6 +208,8 @@ struct Runtime {
     fn_toggled: bool,
     /// The row under the F-key row while Fn is held with `fn_momentary`.
     fn_return: Option<Mode>,
+    /// Another key went down during the Fn press.
+    fn_combined: bool,
     contacts: HashMap<u32, Contact>,
     positions: HashMap<u32, f64>,
     pending: Option<PendingTouch>,
@@ -327,6 +329,7 @@ impl Runtime {
             fn_down_ms: None,
             fn_toggled: false,
             fn_return: None,
+            fn_combined: false,
             contacts: HashMap::new(),
             positions: HashMap::new(),
             pending: None,
@@ -1651,23 +1654,34 @@ impl Runtime {
     }
 
     /// Shows the F-key row while Fn is held and the previous row again on
-    /// release. The row stays lit for the whole hold.
+    /// release. The row stays lit for the whole hold. With
+    /// `fn_tap_app_row`, a short tap of Fn alone opens or closes the row of
+    /// the focused app instead.
     fn fn_momentary_event(&mut self, pressed: bool, now: u64) -> Result<()> {
         if pressed {
-            if self.fn_return.is_some() {
+            if self.fn_down_ms.is_some() {
                 return Ok(());
             }
-            self.fn_return = Some(self.state.mode);
-            if self.visible && self.state.mode != Mode::Function {
-                self.switch_mode(Mode::Function, now, false)?;
-            } else {
-                self.state.set_mode(Mode::Function);
+            self.fn_down_ms = Some(now);
+            self.fn_combined = false;
+            if !self.config.fn_tap_app_row {
+                self.show_function_row(now)?;
+            } else if !self.visible {
                 self.wake(false)?;
             }
             self.deadline_ms = None;
             return Ok(());
         }
+        let Some(down) = self.fn_down_ms.take() else {
+            return Ok(());
+        };
         let Some(back) = self.fn_return.take() else {
+            if !self.fn_combined && !long_press_due(down, now, FN_TAP_MS) {
+                self.toggle_app_row(now)?;
+            }
+            if self.visible {
+                self.deadline_ms = Some(now + self.lit_timeout_ms());
+            }
             return Ok(());
         };
         // The focus may have left the profiled app during the hold.
@@ -1686,10 +1700,49 @@ impl Runtime {
         Ok(())
     }
 
+    fn show_function_row(&mut self, now: u64) -> Result<()> {
+        self.fn_return = Some(self.state.mode);
+        if self.visible && self.state.mode != Mode::Function {
+            self.switch_mode(Mode::Function, now, false)?;
+        } else {
+            self.state.set_mode(Mode::Function);
+            self.wake(false)?;
+        }
+        self.deadline_ms = None;
+        Ok(())
+    }
+
+    /// Opens the row of the focused app, or closes it again.
+    fn toggle_app_row(&mut self, now: u64) -> Result<()> {
+        if self.state.mode == Mode::App {
+            return self.switch_mode(self.mode_before_app, now, false);
+        }
+        if self.app_active.is_none() {
+            return Ok(());
+        }
+        self.mode_before_app = self.state.mode;
+        self.switch_mode(Mode::App, now, false)
+    }
+
+    /// A key pressed together with Fn makes the press a combination, not a
+    /// tap.
+    fn other_key_pressed(&mut self) {
+        if self.fn_down_ms.is_some() {
+            self.fn_combined = true;
+        }
+    }
+
     fn toggle_mode_if_due(&mut self, now: u64) -> Result<()> {
         let Some(down) = self.fn_down_ms else {
             return Ok(());
         };
+        if self.config.fn_momentary {
+            // With taps, the F keys wait until the press is no tap.
+            if self.fn_return.is_none() && long_press_due(down, now, FN_TAP_MS) {
+                self.show_function_row(now)?;
+            }
+            return Ok(());
+        }
         if self.fn_toggled || !long_press_due(down, now, self.config.fn_long_press_ms) {
             return Ok(());
         }
@@ -1747,6 +1800,8 @@ impl Runtime {
         // During an Fn hold the row under the F keys follows the focus.
         let current = self.fn_return.unwrap_or(self.state.mode);
         let target = match active {
+            // The app row waits for an Fn tap.
+            Some(_) if self.config.fn_tap_app_row && current != Mode::App => return Ok(()),
             Some(_) => {
                 if previous.is_none() && current != Mode::App {
                     self.mode_before_app = current;
@@ -1932,10 +1987,12 @@ impl Runtime {
         if let Some(deadline) = self.deadline_ms {
             deadlines.push(deadline);
         }
-        if let Some(down) = self.fn_down_ms
-            && !self.fn_toggled
-        {
-            deadlines.push(down + self.config.fn_long_press_ms);
+        if let Some(down) = self.fn_down_ms {
+            if !self.config.fn_momentary && !self.fn_toggled {
+                deadlines.push(down + self.config.fn_long_press_ms);
+            } else if self.config.fn_momentary && self.fn_return.is_none() {
+                deadlines.push(down + FN_TAP_MS);
+            }
         }
         if let Some(deadline) = self.learner.next_settle_ms(&self.config) {
             deadlines.push(deadline);
@@ -2233,6 +2290,8 @@ fn main() -> Result<()> {
                         runtime.user_activity(runtime.now_ms(), true)?;
                         if key.key() == Key::Fn as u32 {
                             runtime.fn_event(pressed)?;
+                        } else if pressed {
+                            runtime.other_key_pressed();
                         }
                     }
                     Event::Pointer(pointer) if pointer.device().name() != "T2 Touch Bar" => {
@@ -2288,6 +2347,9 @@ fn cache_slot(kind: LevelKind) -> usize {
 fn is_touch_bar(name: &str) -> bool {
     name.contains("Touch Bar") || name.contains("TouchBar")
 }
+
+/// An Fn press shorter than this is a tap. Longer ones show the F keys.
+const FN_TAP_MS: u64 = 250;
 
 fn long_press_due(down_ms: u64, now_ms: u64, threshold_ms: u64) -> bool {
     now_ms.saturating_sub(down_ms) >= threshold_ms

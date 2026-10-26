@@ -125,6 +125,10 @@ the Mac is left alone.
 Set `fn_momentary = true` to make Fn work like on macOS as well: holding Fn
 shows the F-key row from any row, app rows included, and releasing it brings
 the previous row back. The long press that switches rows is then off.
+Add `fn_tap_app_row = true` to keep the usual row in apps with a profile:
+a short tap of Fn alone opens the app row and another tap closes it, like
+macOS's "Press fn key to show App Controls". The F keys then appear after
+250 ms of holding Fn, so a tap does not flash them.
 
 ## Installation
 

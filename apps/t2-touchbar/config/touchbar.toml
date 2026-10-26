@@ -48,6 +48,11 @@ stay_lit = false
 # again on release, instead of switching rows after fn_long_press_ms.
 fn_momentary = false
 
+# With fn_momentary: apps with a profile in apps.toml keep the usual row, and a
+# short tap of Fn alone opens their row (another tap closes it). Holding Fn
+# still shows the F keys, after a 250 ms delay that tells a tap from a hold.
+fn_tap_app_row = false
+
 # Show "Artist – Title" on the dark bar for five seconds when a media player
 # (MPRIS) starts a new track, with previous/next keys at both ends.
 show_track_changes = true
